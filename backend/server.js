@@ -3,7 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
-
+import Booking from "./models/Booking.js";
 
 dotenv.config();
 
