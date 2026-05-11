@@ -46,7 +46,7 @@ export default function BookingModal({ show, onClose }) {
       console.log("DATA:", data);
 
       if (!res.ok) {
-        setError(data.error || "Booking failed");
+        setError(data.error);
         return;
       }
 
@@ -72,48 +72,47 @@ export default function BookingModal({ show, onClose }) {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-[100] px-4">
-      <div className="bg-white w-full max-w-md p-5 rounded-lg">
-        <h2 className="text-xl font-bold mb-4">Book a Table 🍋</h2>
+    <div className="fixed inset-0 flex items-center justify-center bg-black/70">
+      <div className="bg-white p-5 w-full max-w-md">
+        <h2 className="text-xl font-bold mb-3">Book Table 🍋</h2>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <input
             name="name"
             placeholder="Name"
             onChange={handleChange}
-            className="p-2 border"
+            className="border p-2"
           />
           <input
             name="email"
             placeholder="Email"
             onChange={handleChange}
-            className="p-2 border"
+            className="border p-2"
           />
           <input
             name="guests"
             type="number"
             min="1"
             onChange={handleChange}
-            className="p-2 border"
+            className="border p-2"
           />
           <input
             name="date"
             type="date"
             onChange={handleChange}
-            className="p-2 border"
+            className="border p-2"
           />
           <input
             name="time"
             type="time"
             onChange={handleChange}
-            className="p-2 border"
+            className="border p-2"
           />
 
           {error && <p className="text-red-500">{error}</p>}
           {success && <p className="text-green-600">{success}</p>}
 
-          <button className="bg-lime-400 p-2 mt-2">Confirm Booking</button>
-
+          <button className="bg-lime-400 p-2">Confirm</button>
           <button type="button" onClick={onClose}>
             Cancel
           </button>

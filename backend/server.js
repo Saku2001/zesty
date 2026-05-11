@@ -29,16 +29,18 @@ app.get("/", (req, res) => {
   res.send("ZESTY backend running 🍋");
 });
 
-// ================= BOOKING =================
+// ================= BOOK =================
 app.post("/book", async (req, res) => {
   try {
-    let { name, email, guests, date, time } = req.body;
+    const { name, email, guests, date, time } = req.body;
 
-    console.log("REQ:", req.body);
+    console.log("REQ BODY:", req.body);
 
-    // 🔥 NORMALISE DATA
     const guestCount = Number(guests);
     const cleanTime = time?.slice(0, 5);
+
+    // 🔥 CREATE FIXED SLOT KEY (IMPORTANT FIX)
+    const slotKey = `${date}_${cleanTime}`;
 
     // ================= VALIDATION =================
     if (!name || !email || !date || !cleanTime) {
@@ -53,18 +55,16 @@ app.post("/book", async (req, res) => {
       });
     }
 
-    // ================= SLOT CHECK =================
-    const existingBookings = await Booking.find({
-      date,
-      time: cleanTime,
-    });
+    // ================= CHECK SLOT =================
+    const existingBookings = await Booking.find({ slot: slotKey });
 
     const totalGuests = existingBookings.reduce(
       (sum, b) => sum + Number(b.guests),
       0
     );
 
-    console.log("TOTAL SLOT GUESTS:", totalGuests);
+    console.log("SLOT:", slotKey);
+    console.log("TOTAL GUESTS:", totalGuests);
 
     if (totalGuests + guestCount > MAX_CAPACITY) {
       return res.status(400).json({
@@ -77,11 +77,10 @@ app.post("/book", async (req, res) => {
       name,
       email,
       guests: guestCount,
-      date,
-      time: cleanTime,
+      slot: slotKey,
     });
 
-    // ================= EMAIL (NON-BLOCKING) =================
+    // ================= EMAIL (SAFE) =================
     try {
       await transporter.sendMail({
         from: `"ZESTY 🍋" <${process.env.EMAIL_USER}>`,
@@ -90,14 +89,14 @@ app.post("/book", async (req, res) => {
         text: `Hi ${name}, your booking is confirmed for ${date} at ${cleanTime}.`,
       });
     } catch (err) {
-      console.log("Email failed (ignored):", err.message);
+      console.log("Email error ignored:", err.message);
     }
 
     return res.status(200).json({
       message: "Booking confirmed!",
     });
   } catch (error) {
-    console.error("SERVER ERROR:", error);
+    console.error(error);
     return res.status(500).json({
       error: "Server error",
     });
@@ -108,7 +107,7 @@ app.post("/book", async (req, res) => {
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected ✅"))
-  .catch((err) => console.log("Mongo error:", err.message));
+  .catch((err) => console.log(err.message));
 
 // ================= START =================
 const PORT = process.env.PORT || 5000;

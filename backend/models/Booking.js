@@ -4,8 +4,7 @@ const bookingSchema = new mongoose.Schema({
   name: String,
   email: String,
   guests: Number,
-  date: String,
-  time: String,
+  slot: String, // IMPORTANT FIX
 });
 
 export default mongoose.model("Booking", bookingSchema);
