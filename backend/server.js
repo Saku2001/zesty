@@ -100,7 +100,7 @@ app.post("/book", async (req, res) => {
           text: `Hi ${name}, your booking is confirmed for ${date} at ${time}.`,
         });
       } catch (err) {
-        console.log("Email failed (ignored):", err.message);
+        console.log("EMAIL ERROR:", err);
       }
     }
 
