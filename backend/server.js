@@ -12,35 +12,31 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ================= ENV =================
+// ================= SAFETY CHECK =================
 const MONGO_URI = process.env.MONGO_URI;
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
-// ================= EMAIL TRANSPORT (FIXED) =================
+// ================= EMAIL (SAFE INIT) =================
 let transporter = null;
 
 if (EMAIL_USER && EMAIL_PASS) {
   try {
     transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587, // ✅ FIX: more stable than 465 on Render
-      secure: false, // ✅ REQUIRED for port 587
+      service: "gmail",
       auth: {
         user: EMAIL_USER,
-        pass: EMAIL_PASS, // MUST be Gmail App Password
+        pass: EMAIL_PASS,
       },
     });
-
-    console.log("Email transporter ready ✅");
   } catch (err) {
-    console.log("Email init failed (ignored)", err.message);
+    console.log("Email init failed (ignored)");
   }
 } else {
   console.log("⚠️ Email credentials missing");
 }
 
-// ================= DATABASE =================
+// ================= DB (SAFE CONNECT) =================
 if (MONGO_URI) {
   mongoose
     .connect(MONGO_URI)
@@ -55,7 +51,7 @@ if (MONGO_URI) {
 // ================= CONFIG =================
 const MAX_CAPACITY = 20;
 
-// ================= HEALTH CHECK =================
+// ================= TEST ROUTE =================
 app.get("/", (req, res) => {
   res.send("ZESTY backend is running 🍋");
 });
@@ -67,12 +63,11 @@ app.post("/book", async (req, res) => {
 
     const guestCount = Number(guests);
 
-    // validation
-    if (!name || !email || !date || !time || !guestCount) {
+    if (!name || !email || !date || !time) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
-    // check existing bookings
+    // ================= SLOT CHECK =================
     const existingBookings = await Booking.find({ date, time });
 
     const totalGuests = existingBookings.reduce(
@@ -80,14 +75,13 @@ app.post("/book", async (req, res) => {
       0
     );
 
-    // capacity check
     if (totalGuests + guestCount > MAX_CAPACITY) {
       return res.status(400).json({
         error: "This time slot is fully booked. Please choose another time.",
       });
     }
 
-    // save booking
+    // ================= SAVE =================
     await Booking.create({
       name,
       email,
@@ -96,7 +90,7 @@ app.post("/book", async (req, res) => {
       time,
     });
 
-    // send email (safe)
+    // ================= EMAIL (SAFE) =================
     if (transporter) {
       try {
         await transporter.sendMail({
@@ -105,10 +99,8 @@ app.post("/book", async (req, res) => {
           subject: "Reservation Confirmed 🍋",
           text: `Hi ${name}, your booking is confirmed for ${date} at ${time}.`,
         });
-
-        console.log("Email sent ✅");
       } catch (err) {
-        console.log("EMAIL ERROR:", err.message);
+        console.log("EMAIL ERROR:", err);
       }
     }
 
