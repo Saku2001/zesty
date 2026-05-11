@@ -3,7 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
-import Booking from "./models/Booking.js";
+
 
 dotenv.config();
 
@@ -51,14 +51,20 @@ app.post("/book", async (req, res) => {
 
     console.log("Booking received:", req.body);
 
-    const guestCount = Number(guests);
+const guestCount = Number(guests);
 
-    // ✅ Validation
-    if (!name || !email || !date || !time || !guestCount) {
-      return res.status(400).json({
-        error: "Please fill in all fields",
-      });
-    }
+// ✅ Proper validation
+if (!name || !email || !date || !time || guests === "") {
+  return res.status(400).json({
+    error: "Please fill in all fields",
+  });
+}
+
+if (isNaN(guestCount) || guestCount <= 0) {
+  return res.status(400).json({
+    error: "Invalid number of guests",
+  });
+}
 
     // ✅ Find existing bookings for this slot
     const existingBookings = await Booking.find({ date, time });
