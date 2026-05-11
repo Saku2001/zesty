@@ -9,21 +9,17 @@ dotenv.config();
 
 const app = express();
 
-// ================= CORS FIX (IMPORTANT FOR VERCEL) =================
+// ================= CORS FIX (IMPORTANT) =================
 app.use(
   cors({
     origin: [
       "http://localhost:5173",
-      "http://localhost:3000",
-      "https://zesty-mauve.vercel.app"
+      "https://zesty-afwa.onrender.com",
     ],
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
+    methods: ["GET", "POST"],
+    credentials: true,
   })
 );
-
-// Handle preflight requests
-app.options("*", cors());
 
 app.use(express.json());
 
@@ -49,7 +45,7 @@ app.post("/book", async (req, res) => {
   try {
     const { name, email, guests, date, time } = req.body;
 
-    console.log("REQ:", req.body);
+    console.log("REQ BODY:", req.body);
 
     const guestCount = parseInt(guests, 10);
     const cleanTime = time?.slice(0, 5);
@@ -67,7 +63,7 @@ app.post("/book", async (req, res) => {
       });
     }
 
-    // ================= SLOT CHECK =================
+    // ================= CHECK SLOT =================
     const existingBookings = await Booking.find({
       date,
       time: cleanTime,
@@ -77,6 +73,8 @@ app.post("/book", async (req, res) => {
       (sum, b) => sum + Number(b.guests),
       0
     );
+
+    console.log("TOTAL SLOT GUESTS:", totalGuests);
 
     if (totalGuests + guestCount > MAX_CAPACITY) {
       return res.status(400).json({
@@ -93,7 +91,7 @@ app.post("/book", async (req, res) => {
       time: cleanTime,
     });
 
-    // ================= EMAIL (NON-BLOCKING) =================
+    // ================= EMAIL (SAFE) =================
     try {
       await transporter.sendMail({
         from: `"ZESTY 🍋" <${process.env.EMAIL_USER}>`,
@@ -102,14 +100,14 @@ app.post("/book", async (req, res) => {
         text: `Hi ${name}, your booking is confirmed for ${date} at ${cleanTime}.`,
       });
     } catch (err) {
-      console.log("Email failed:", err.message);
+      console.log("Email failed (ignored):", err.message);
     }
 
     return res.status(200).json({
       message: "Booking confirmed!",
     });
   } catch (error) {
-    console.error(error);
+    console.error("SERVER ERROR:", error);
     return res.status(500).json({
       error: "Server error",
     });
@@ -122,9 +120,9 @@ mongoose
   .then(() => console.log("MongoDB connected ✅"))
   .catch((err) => console.log(err.message));
 
-// ================= RENDER PORT FIX =================
+// ================= RENDER SAFE PORT =================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log("Server running on", PORT);
+  console.log(`Server running on port ${PORT}`);
 });
