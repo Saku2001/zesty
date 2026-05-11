@@ -9,49 +9,60 @@ dotenv.config();
 
 const app = express();
 
-// ================= GLOBAL CORS FIX (CRITICAL) =================
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:3000",
-  "https://zesty-mauve.vercel.app"
-];
-
+// ================= CORS FIX (Vercel + Local + Render) =================
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // allow requests with no origin (like mobile apps or curl)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        return callback(null, false);
-      }
-    },
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "https://zesty-mauve.vercel.app",
+    ],
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type"],
   })
 );
 
-// MUST handle preflight
 app.options("*", cors());
 
 app.use(express.json());
 
-// ================= DEBUG (IMPORTANT FOR YOU) =================
+// ================= SAFETY LOG =================
 app.use((req, res, next) => {
   console.log("➡️", req.method, req.url);
   next();
 });
 
-// ================= EMAIL =================
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// ================= ENV SAFETY CHECK =================
+const MONGO_URI = process.env.MONGO_URI;
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
+
+// ================= EMAIL TRANSPORT (SAFE) =================
+let transporter = null;
+
+if (EMAIL_USER && EMAIL_PASS) {
+  transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: EMAIL_USER,
+      pass: EMAIL_PASS,
+    },
+  });
+} else {
+  console.log("⚠️ Email credentials missing (email disabled)");
+}
+
+// ================= DB CONNECT (NON-CRASHING) =================
+if (MONGO_URI) {
+  mongoose
+    .connect(MONGO_URI)
+    .then(() => console.log("MongoDB connected ✅"))
+    .catch((err) =>
+      console.log("MongoDB connection error (non-fatal):", err.message)
+    );
+} else {
+  console.log("❌ MONGO_URI missing (DB not connected)");
+}
 
 // ================= CONFIG =================
 const MAX_CAPACITY = 20;
@@ -70,11 +81,15 @@ app.post("/book", async (req, res) => {
 
     // ================= VALIDATION =================
     if (!name || !email || !date || !cleanTime) {
-      return res.status(400).json({ error: "Please fill in all fields" });
+      return res.status(400).json({
+        error: "Please fill in all fields",
+      });
     }
 
     if (isNaN(guestCount) || guestCount <= 0) {
-      return res.status(400).json({ error: "Invalid guests value" });
+      return res.status(400).json({
+        error: "Invalid guests number",
+      });
     }
 
     // ================= SLOT CHECK =================
@@ -94,7 +109,7 @@ app.post("/book", async (req, res) => {
       });
     }
 
-    // ================= SAVE =================
+    // ================= SAVE BOOKING =================
     await Booking.create({
       name,
       email,
@@ -103,16 +118,18 @@ app.post("/book", async (req, res) => {
       time: cleanTime,
     });
 
-    // ================= EMAIL (NON BLOCKING) =================
-    try {
-      await transporter.sendMail({
-        from: `"ZESTY 🍋" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: "Booking Confirmed 🍋",
-        text: `Hi ${name}, your booking is confirmed for ${date} at ${cleanTime}.`,
-      });
-    } catch (err) {
-      console.log("Email error (ignored):", err.message);
+    // ================= EMAIL (SAFE) =================
+    if (transporter) {
+      try {
+        await transporter.sendMail({
+          from: `"ZESTY 🍋" <${EMAIL_USER}>`,
+          to: email,
+          subject: "Booking Confirmed 🍋",
+          text: `Hi ${name}, your booking is confirmed for ${date} at ${cleanTime}.`,
+        });
+      } catch (err) {
+        console.log("Email failed (ignored):", err.message);
+      }
     }
 
     return res.status(200).json({
@@ -126,13 +143,7 @@ app.post("/book", async (req, res) => {
   }
 });
 
-// ================= DB (SAFE CONNECTION) =================
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected ✅"))
-  .catch((err) => console.log("MongoDB error:", err.message));
-
-// ================= RENDER PORT FIX =================
+// ================= START SERVER =================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
