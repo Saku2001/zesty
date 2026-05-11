@@ -9,90 +9,79 @@ dotenv.config();
 
 const app = express();
 
-// ================= CORS FIX (Vercel + Local + Render) =================
+// ================= BASIC MIDDLEWARE =================
+app.use(express.json());
+
+// ================= SAFE CORS =================
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:3000",
-      "https://zesty-mauve.vercel.app",
-    ],
+    origin: "*", // TEMP: remove all CORS issues during debugging
     methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
   })
 );
 
 app.options("*", cors());
 
-app.use(express.json());
+// ================= DEBUG STARTUP =================
+console.log("🚀 Server starting...");
+console.log("MONGO_URI exists:", !!process.env.MONGO_URI);
+console.log("EMAIL_USER exists:", !!process.env.EMAIL_USER);
 
-// ================= SAFETY LOG =================
-app.use((req, res, next) => {
-  console.log("➡️", req.method, req.url);
-  next();
-});
+// ================= SAFE DB CONNECT =================
+try {
+  if (process.env.MONGO_URI) {
+    mongoose
+      .connect(process.env.MONGO_URI)
+      .then(() => console.log("MongoDB connected ✅"))
+      .catch((err) =>
+        console.log("MongoDB error (non-fatal):", err.message)
+      );
+  } else {
+    console.log("❌ MONGO_URI missing");
+  }
+} catch (err) {
+  console.log("DB crash prevented:", err.message);
+}
 
-// ================= ENV SAFETY CHECK =================
-const MONGO_URI = process.env.MONGO_URI;
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
-
-// ================= EMAIL TRANSPORT (SAFE) =================
+// ================= EMAIL (SAFE INIT) =================
 let transporter = null;
 
-if (EMAIL_USER && EMAIL_PASS) {
-  transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: EMAIL_USER,
-      pass: EMAIL_PASS,
-    },
-  });
-} else {
-  console.log("⚠️ Email credentials missing (email disabled)");
+try {
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    const nodemailer = await import("nodemailer");
+
+    transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+  }
+} catch (err) {
+  console.log("Email setup failed (ignored)");
 }
 
-// ================= DB CONNECT (NON-CRASHING) =================
-if (MONGO_URI) {
-  mongoose
-    .connect(MONGO_URI)
-    .then(() => console.log("MongoDB connected ✅"))
-    .catch((err) =>
-      console.log("MongoDB connection error (non-fatal):", err.message)
-    );
-} else {
-  console.log("❌ MONGO_URI missing (DB not connected)");
-}
-
-// ================= CONFIG =================
+// ================= CONSTANT =================
 const MAX_CAPACITY = 20;
 
-// ================= ROUTES =================
+// ================= HEALTH CHECK =================
 app.get("/", (req, res) => {
   res.send("ZESTY backend running 🍋");
 });
 
+// ================= BOOKING =================
 app.post("/book", async (req, res) => {
   try {
     const { name, email, guests, date, time } = req.body;
 
-    const guestCount = parseInt(guests, 10);
-    const cleanTime = time?.slice(0, 5);
-
-    // ================= VALIDATION =================
-    if (!name || !email || !date || !cleanTime) {
-      return res.status(400).json({
-        error: "Please fill in all fields",
-      });
+    if (!name || !email || !guests || !date || !time) {
+      return res.status(400).json({ error: "Missing fields" });
     }
 
-    if (isNaN(guestCount) || guestCount <= 0) {
-      return res.status(400).json({
-        error: "Invalid guests number",
-      });
-    }
+    const guestCount = Number(guests);
+    const cleanTime = time.slice(0, 5);
 
-    // ================= SLOT CHECK =================
     const existingBookings = await Booking.find({
       date,
       time: cleanTime,
@@ -105,11 +94,10 @@ app.post("/book", async (req, res) => {
 
     if (totalGuests + guestCount > MAX_CAPACITY) {
       return res.status(400).json({
-        error: "This time slot is fully booked. Please choose another time.",
+        error: "This time slot is fully booked",
       });
     }
 
-    // ================= SAVE BOOKING =================
     await Booking.create({
       name,
       email,
@@ -118,32 +106,28 @@ app.post("/book", async (req, res) => {
       time: cleanTime,
     });
 
-    // ================= EMAIL (SAFE) =================
+    // EMAIL SAFE
     if (transporter) {
       try {
         await transporter.sendMail({
-          from: `"ZESTY 🍋" <${EMAIL_USER}>`,
+          from: process.env.EMAIL_USER,
           to: email,
           subject: "Booking Confirmed 🍋",
-          text: `Hi ${name}, your booking is confirmed for ${date} at ${cleanTime}.`,
+          text: `Hi ${name}, your booking is confirmed.`,
         });
       } catch (err) {
-        console.log("Email failed (ignored):", err.message);
+        console.log("Email failed:", err.message);
       }
     }
 
-    return res.status(200).json({
-      message: "Booking confirmed!",
-    });
-  } catch (error) {
-    console.error("SERVER ERROR:", error);
-    return res.status(500).json({
-      error: "Server error",
-    });
+    return res.json({ message: "Booking confirmed" });
+  } catch (err) {
+    console.log("SERVER CRASH:", err);
+    return res.status(500).json({ error: "Server error" });
   }
 });
 
-// ================= START SERVER =================
+// ================= FORCE SAFE START =================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
