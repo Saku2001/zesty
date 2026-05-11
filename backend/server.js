@@ -12,7 +12,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ================= EMAIL SETUP =================
+// ================= EMAIL =================
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -24,41 +24,24 @@ const transporter = nodemailer.createTransport({
 // ================= CONFIG =================
 const MAX_CAPACITY = 20;
 
-// ================= TEST ROUTE =================
+// ================= HEALTH CHECK =================
 app.get("/", (req, res) => {
-  res.send("ZESTY backend is running 🍋");
+  res.send("ZESTY backend running 🍋");
 });
 
-// ================= EMAIL TEST =================
-app.get("/test-email", async (req, res) => {
-  try {
-    await transporter.sendMail({
-      from: `"ZESTY 🍋" <${process.env.EMAIL_USER}>`,
-      to: process.env.EMAIL_USER,
-      subject: "Test Email",
-      text: "Email working 🍋",
-    });
-
-    res.send("Test email sent!");
-  } catch (err) {
-    console.error("Email test failed:", err);
-    res.status(500).send("Email failed");
-  }
-});
-
-// ================= BOOKING ROUTE =================
+// ================= BOOKING =================
 app.post("/book", async (req, res) => {
   try {
     let { name, email, guests, date, time } = req.body;
 
-    console.log("Booking received:", req.body);
+    console.log("REQ:", req.body);
 
-    // 🔥 Normalize values
-    const guestCount = parseInt(guests, 10);
-    const normalizedTime = time ? time.slice(0, 5) : time;
+    // 🔥 NORMALISE DATA
+    const guestCount = Number(guests);
+    const cleanTime = time?.slice(0, 5);
 
     // ================= VALIDATION =================
-    if (!name || !email || !date || !normalizedTime) {
+    if (!name || !email || !date || !cleanTime) {
       return res.status(400).json({
         error: "Please fill in all fields",
       });
@@ -70,10 +53,10 @@ app.post("/book", async (req, res) => {
       });
     }
 
-    // ================= CHECK EXISTING BOOKINGS =================
+    // ================= SLOT CHECK =================
     const existingBookings = await Booking.find({
       date,
-      time: normalizedTime,
+      time: cleanTime,
     });
 
     const totalGuests = existingBookings.reduce(
@@ -81,73 +64,55 @@ app.post("/book", async (req, res) => {
       0
     );
 
-    console.log("Current slot guests:", totalGuests);
-    console.log("New booking guests:", guestCount);
+    console.log("TOTAL SLOT GUESTS:", totalGuests);
 
-    // ================= CAPACITY CHECK =================
     if (totalGuests + guestCount > MAX_CAPACITY) {
       return res.status(400).json({
         error: "This time slot is fully booked. Please choose another time.",
       });
     }
 
-    // ================= SAVE BOOKING =================
-    const booking = await Booking.create({
+    // ================= SAVE =================
+    await Booking.create({
       name,
       email,
       guests: guestCount,
       date,
-      time: normalizedTime,
+      time: cleanTime,
     });
 
-    console.log("Booking saved ✅", booking._id);
-
-    // ================= EMAIL (SAFE) =================
+    // ================= EMAIL (NON-BLOCKING) =================
     try {
       await transporter.sendMail({
         from: `"ZESTY 🍋" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: "Your Reservation is Confirmed 🍋",
-        text: `Hello ${name},
-
-Your booking at ZESTY is confirmed!
-
-Guests: ${guestCount}
-Date: ${date}
-Time: ${normalizedTime}
-
-See you soon 🍋`,
+        subject: "Booking Confirmed 🍋",
+        text: `Hi ${name}, your booking is confirmed for ${date} at ${cleanTime}.`,
       });
-
-      console.log("Email sent ✅");
-    } catch (emailError) {
-      console.error("Email failed (non-blocking):", emailError);
+    } catch (err) {
+      console.log("Email failed (ignored):", err.message);
     }
 
-    // ================= RESPONSE =================
     return res.status(200).json({
       message: "Booking confirmed!",
     });
   } catch (error) {
-    console.error("BOOKING ERROR:", error);
-
+    console.error("SERVER ERROR:", error);
     return res.status(500).json({
       error: "Server error",
     });
   }
 });
 
-// ================= DATABASE =================
+// ================= DB =================
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected ✅"))
-  .catch((err) =>
-    console.log("MongoDB connection failed:", err.message)
-  );
+  .catch((err) => console.log("Mongo error:", err.message));
 
-// ================= START SERVER =================
+// ================= START =================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on ${PORT}`);
 });
