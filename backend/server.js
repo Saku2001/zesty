@@ -9,19 +9,40 @@ dotenv.config();
 
 const app = express();
 
-// ================= CORS FIX (IMPORTANT) =================
+// ================= GLOBAL CORS FIX (CRITICAL) =================
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "https://zesty-mauve.vercel.app"
+];
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://zesty-afwa.onrender.com",
-    ],
-    methods: ["GET", "POST"],
-    credentials: true,
+    origin: function (origin, callback) {
+      // allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(null, false);
+      }
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"],
   })
 );
 
+// MUST handle preflight
+app.options("*", cors());
+
 app.use(express.json());
+
+// ================= DEBUG (IMPORTANT FOR YOU) =================
+app.use((req, res, next) => {
+  console.log("➡️", req.method, req.url);
+  next();
+});
 
 // ================= EMAIL =================
 const transporter = nodemailer.createTransport({
@@ -35,35 +56,28 @@ const transporter = nodemailer.createTransport({
 // ================= CONFIG =================
 const MAX_CAPACITY = 20;
 
-// ================= HEALTH CHECK =================
+// ================= ROUTES =================
 app.get("/", (req, res) => {
   res.send("ZESTY backend running 🍋");
 });
 
-// ================= BOOKING =================
 app.post("/book", async (req, res) => {
   try {
     const { name, email, guests, date, time } = req.body;
-
-    console.log("REQ BODY:", req.body);
 
     const guestCount = parseInt(guests, 10);
     const cleanTime = time?.slice(0, 5);
 
     // ================= VALIDATION =================
     if (!name || !email || !date || !cleanTime) {
-      return res.status(400).json({
-        error: "Please fill in all fields",
-      });
+      return res.status(400).json({ error: "Please fill in all fields" });
     }
 
     if (isNaN(guestCount) || guestCount <= 0) {
-      return res.status(400).json({
-        error: "Invalid number of guests",
-      });
+      return res.status(400).json({ error: "Invalid guests value" });
     }
 
-    // ================= CHECK SLOT =================
+    // ================= SLOT CHECK =================
     const existingBookings = await Booking.find({
       date,
       time: cleanTime,
@@ -73,8 +87,6 @@ app.post("/book", async (req, res) => {
       (sum, b) => sum + Number(b.guests),
       0
     );
-
-    console.log("TOTAL SLOT GUESTS:", totalGuests);
 
     if (totalGuests + guestCount > MAX_CAPACITY) {
       return res.status(400).json({
@@ -91,7 +103,7 @@ app.post("/book", async (req, res) => {
       time: cleanTime,
     });
 
-    // ================= EMAIL (SAFE) =================
+    // ================= EMAIL (NON BLOCKING) =================
     try {
       await transporter.sendMail({
         from: `"ZESTY 🍋" <${process.env.EMAIL_USER}>`,
@@ -100,7 +112,7 @@ app.post("/book", async (req, res) => {
         text: `Hi ${name}, your booking is confirmed for ${date} at ${cleanTime}.`,
       });
     } catch (err) {
-      console.log("Email failed (ignored):", err.message);
+      console.log("Email error (ignored):", err.message);
     }
 
     return res.status(200).json({
@@ -114,15 +126,15 @@ app.post("/book", async (req, res) => {
   }
 });
 
-// ================= DB =================
+// ================= DB (SAFE CONNECTION) =================
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected ✅"))
-  .catch((err) => console.log(err.message));
+  .catch((err) => console.log("MongoDB error:", err.message));
 
-// ================= RENDER SAFE PORT =================
+// ================= RENDER PORT FIX =================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log("Server running on port", PORT);
 });
