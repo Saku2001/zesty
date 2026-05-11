@@ -51,43 +51,32 @@ app.post("/book", async (req, res) => {
 
     console.log("Booking received:", req.body);
 
-const guestCount = Number(guests);
+    const guestCount = Number(guests);
 
-// ✅ Proper validation
-if (!name || !email || !date || !time || guests === "") {
-  return res.status(400).json({
-    error: "Please fill in all fields",
-  });
-}
-
-if (isNaN(guestCount) || guestCount <= 0) {
-  return res.status(400).json({
-    error: "Invalid number of guests",
-  });
-}
-
-    // ✅ Find existing bookings for this slot
+    // ⏱️ Create 1-hour window
     const existingBookings = await Booking.find({ date, time });
 
-    // ✅ Count total guests already booked
-    const totalGuests = existingBookings.reduce(
-      (sum, b) => sum + Number(b.guests),
-      0
-    );
+// total guests already booked in THIS exact slot
+const totalGuests = existingBookings.reduce(
+  (sum, b) => sum + Number(b.guests),
+  0
+);
 
-    console.log("Current guests in slot:", totalGuests);
-    console.log("New booking guests:", guestCount);
+console.log("Current guests in slot:", totalGuests);
 
-    // ❌ Capacity exceeded
+    // ➕ Count total guests already booke
+
+
+
+    // ❌ If capacity exceeded
     if (totalGuests + guestCount > MAX_CAPACITY) {
       return res.status(400).json({
-        error:
-          "This time slot is fully booked. Please choose another time.",
+        error: "This time slot is fully booked. Please choose another time.",
       });
     }
 
     // ✅ Save booking
-    const booking = await Booking.create({
+    await Booking.create({
       name,
       email,
       guests: guestCount,
@@ -95,39 +84,26 @@ if (isNaN(guestCount) || guestCount <= 0) {
       time,
     });
 
-    console.log("Booking saved ✅", booking._id);
-
-    // ✅ Send email safely
-    try {
-      await transporter.sendMail({
-        from: `"ZESTY 🍋" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: "Your Reservation is Confirmed 🍋",
-        text: `Hello ${name},
-
-Your booking at ZESTY is confirmed!
-
-Guests: ${guestCount}
-Date: ${date}
-Time: ${time}
-
-We look forward to serving you 🍋`,
-      });
-
-      console.log("Email sent ✅");
-    } catch (emailError) {
-      console.error("Email failed:", emailError);
-    }
-
-    // ✅ Success response
-    return res.status(200).json({
-      message: "Booking confirmed!",
+    // 📧 Send email
+    await transporter.sendMail({
+      from: `"ZESTY 🍋" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Your Reservation is Confirmed 🍋",
+      text: `Hello ${name}, Your booking at ZESTY is confirmed! Guests: ${guestCount} Date: ${date} Time: ${time}`,
     });
+
+    res.status(200).json({ message: "Booking confirmed!" });
   } catch (error) {
-    console.error("BOOKING ERROR:", error);
-
-    return res.status(500).json({
-      error: "Server error",
-    });
+    console.error("Error:", error);
+    res.status(500).json({ error: "Server error" });
   }
+});
+// ✅ CONNECT DB
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB connected ✅"))
+  .catch((err) => console.log("MongoDB connection failed:", err.message));
+
+app.listen(5000, () => {
+  console.log("Server running on port 5000");
 });
